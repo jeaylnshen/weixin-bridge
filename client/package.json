@@ -1,0 +1,16 @@
+{
+  "name": "weixin-agent-bridge-client",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "weixin-agent-bridge-client": "./weixin-agent-bridge.mjs"
+  },
+  "scripts": {
+    "client": "node weixin-agent-bridge.mjs client",
+    "check": "node --check weixin-agent-bridge.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

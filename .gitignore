@@ -1,0 +1,25 @@
+# Logs & temporary files
+*.log
+*.tmp
+*.bak
+*.corrupt-*
+*.pid
+
+# Node dependencies
+node_modules/
+
+# Secrets and state files
+*.secret
+accounts/
+accounts.json
+*.sync.json
+*.seen.json
+*.pending.json
+
+# Local agent caches
+.codex/
+.openclaw/
+
+# OS specific
+.DS_Store
+Thumbs.db

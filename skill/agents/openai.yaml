@@ -1,0 +1,4 @@
+interface:
+  display_name: "Weixin Agent Bridge"
+  short_description: "Deploy a multi-agent Weixin bridge"
+  default_prompt: "Use $weixin-agent-bridge to deploy or configure the server/client Weixin Agent Bridge."

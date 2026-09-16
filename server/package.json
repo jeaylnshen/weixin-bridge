@@ -1,0 +1,19 @@
+{
+  "name": "weixin-agent-bridge-server",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "weixin-agent-bridge-server": "./weixin-agent-bridge.mjs"
+  },
+  "scripts": {
+    "login": "node weixin-agent-bridge.mjs login",
+    "server": "node weixin-agent-bridge.mjs server",
+    "accounts": "node weixin-agent-bridge.mjs accounts",
+    "once": "node weixin-agent-bridge.mjs once",
+    "check": "node --check weixin-agent-bridge.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

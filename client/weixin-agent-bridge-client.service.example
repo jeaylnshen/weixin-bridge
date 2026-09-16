@@ -1,0 +1,30 @@
+[Unit]
+Description=Weixin Agent Bridge Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/weixin-agent-bridge-client
+Environment=HOME=/root
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=WEIXIN_SERVER_HOSTNAME=bridge.example.com
+Environment=WEIXIN_SERVER_PORT=8787
+Environment=WEIXIN_SERVER_SCHEME=https
+Environment=WEIXIN_SERVER_SECRET_FILE=/etc/weixin-agent-bridge/server.secret
+Environment=WEIXIN_CLIENT_ID=server1
+Environment=WEIXIN_CLIENT_HOST=0.0.0.0
+Environment=WEIXIN_CLIENT_PORT=8788
+Environment=WEIXIN_CLIENT_PUBLIC_URL=https://server1.example.com:8788
+Environment=WEIXIN_CODEX_CWD=/srv/project
+Environment=WEIXIN_CODEX_SANDBOX=workspace-write
+Environment=WEIXIN_CODEX_APPROVAL=never
+ExecStart=/usr/bin/node /opt/weixin-agent-bridge-client/weixin-agent-bridge.mjs client
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/weixin-agent-bridge-client.log
+StandardError=append:/var/log/weixin-agent-bridge-client.log
+
+[Install]
+WantedBy=multi-user.target
