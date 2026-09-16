@@ -17,6 +17,7 @@ Environment=WEIXIN_CLIENT_ID=server1
 Environment=WEIXIN_CLIENT_HOST=0.0.0.0
 Environment=WEIXIN_CLIENT_PORT=8788
 Environment=WEIXIN_CLIENT_PUBLIC_URL=https://server1.example.com:8788
+Environment=WEIXIN_AGENT_TYPE=codex
 Environment=WEIXIN_CODEX_CWD=/srv/project
 Environment=WEIXIN_CODEX_SANDBOX=workspace-write
 Environment=WEIXIN_CODEX_APPROVAL=never

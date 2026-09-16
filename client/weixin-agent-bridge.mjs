@@ -7,7 +7,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const DEFAULT_BASE_URL = "https://ilinkai.weixin.qq.com";
 const DEFAULT_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 const DEFAULT_TIMEOUT_MS = 35_000;
@@ -23,6 +23,7 @@ const DEFAULT_CLIENT_PORT = 8788;
 const DEFAULT_CLIENT_TTL_MS = 90_000;
 const MIN_AGENT_TIMEOUT_MS = 1_000;
 const MAX_AGENT_TIMEOUT_MS = 15 * 60_000;
+const AGENT_TYPES = ["codex", "claude", "opencode"];
 
 const state = {
   stopping: false,
@@ -371,6 +372,7 @@ function loadAgentsConfig() {
       token: String(agent.token || "").trim(),
       cwd: String(agent.cwd || "").trim(),
       model: String(agent.model || "").trim(),
+      agentType: String(agent.agentType || "").trim(),
       timeoutMs: Number(agent.timeoutMs || DEFAULT_AGENT_TIMEOUT_MS),
     };
   }
@@ -379,8 +381,9 @@ function loadAgentsConfig() {
       id: "local",
       label: "本机",
       type: "local",
-      cwd: process.env.WEIXIN_CODEX_CWD?.trim() || process.cwd(),
-      model: process.env.WEIXIN_CODEX_MODEL?.trim() || "",
+      cwd: agentCwd(),
+      model: agentEnv("MODEL"),
+      agentType: resolveAgentType(),
       timeoutMs: DEFAULT_AGENT_TIMEOUT_MS,
     };
   }
@@ -394,6 +397,7 @@ function loadAgentsConfig() {
       token: String(client.clientToken || "").trim(),
       cwd: String(client.cwd || "").trim(),
       model: String(client.model || "").trim(),
+      agentType: String(client.agentType || "").trim(),
       timeoutMs: Number(client.timeoutMs || DEFAULT_AGENT_TIMEOUT_MS),
       online: true,
       lastSeenMs: Number(client.lastSeenMs || 0),
@@ -431,13 +435,14 @@ function agentCommand(body) {
 
 function formatAgentsList(config, currentId) {
   return Object.values(config.agents)
-    .map((agent) => `${agent.id === currentId ? "●" : "○"} ${agent.id}：${agent.label}${agent.type === "remote" ? "（远程）" : "（本机）"}`)
+    .map((agent) => `${agent.id === currentId ? "●" : "○"} ${agent.id}：${agent.label}${agent.type === "remote" ? "（远程" : "（本机"}${agent.agentType ? `/${agent.agentType}` : ""}）`)
     .join("\n");
 }
 
 function describeAgent(agent) {
-  if (agent.type === "remote") return `${agent.label}（${agent.id}）\n地址：${agent.url}`;
-  return `${agent.label}（${agent.id}）\n目录：${agent.cwd || process.env.WEIXIN_CODEX_CWD || process.cwd()}`;
+  const executor = agent.agentType ? `\n执行器：${agent.agentType}` : "";
+  if (agent.type === "remote") return `${agent.label}（${agent.id}）${executor}\n地址：${agent.url}`;
+  return `${agent.label}（${agent.id}）${executor}\n目录：${agent.cwd || agentCwd()}`;
 }
 
 function conversationsDir(accountId) {
@@ -1264,6 +1269,70 @@ function parseExtraArgs(raw) {
   return result;
 }
 
+function agentEnv(name, fallback = "") {
+  const generic = process.env[`WEIXIN_AGENT_${name}`]?.trim();
+  if (generic) return generic;
+  return process.env[`WEIXIN_CODEX_${name}`]?.trim() || fallback;
+}
+
+function agentCwd() {
+  return agentEnv("CWD", process.cwd());
+}
+
+function executableExists(binary) {
+  if (!binary) return false;
+  if (binary.includes(path.sep)) {
+    try {
+      fs.accessSync(binary, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return String(process.env.PATH || "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .some((dir) => {
+      try {
+        fs.accessSync(path.join(dir, binary), fs.constants.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+}
+
+function agentBinary(type) {
+  return process.env.WEIXIN_AGENT_BIN?.trim() ||
+    (type === "codex" ? process.env.WEIXIN_CODEX_BIN?.trim() : "") || type;
+}
+
+function resolveAgentType() {
+  const explicit = process.env.WEIXIN_AGENT_TYPE?.trim().toLowerCase();
+  if (explicit) {
+    if (!AGENT_TYPES.includes(explicit)) {
+      throw new Error(`WEIXIN_AGENT_TYPE must be one of: ${AGENT_TYPES.join(", ")}`);
+    }
+    if (!executableExists(agentBinary(explicit))) {
+      throw new Error(`${explicit} executable not found: ${agentBinary(explicit)}`);
+    }
+    return explicit;
+  }
+  if (process.env.WEIXIN_AGENT_BIN?.trim()) {
+    throw new Error("WEIXIN_AGENT_BIN requires an explicit WEIXIN_AGENT_TYPE");
+  }
+  // A legacy custom binary is assumed to implement the Codex CLI contract.
+  if (process.env.WEIXIN_CODEX_BIN?.trim()) return "codex";
+  const detected = AGENT_TYPES.filter((type) => executableExists(agentBinary(type)));
+  if (!detected.length) {
+    throw new Error(`no supported Agent CLI found; set WEIXIN_AGENT_TYPE to one of: ${AGENT_TYPES.join(", ")}`);
+  }
+  if (detected.length > 1) {
+    warn(`multiple Agent CLIs detected (${detected.join(", ")}); using ${detected[0]}. Set WEIXIN_AGENT_TYPE to choose explicitly`);
+  }
+  return detected[0];
+}
+
 function buildCodexPrompt(message, body, history = []) {
   return [
     "你正在通过微信回复用户。请直接回答用户，不要提到桥接器实现细节。",
@@ -1358,31 +1427,31 @@ async function runCodex(prompt, options = {}) {
   const outputFile = path.join(os.tmpdir(), `codex-weixin-${randomUUID()}.txt`);
   const args = [
     "-a",
-    options.approval || process.env.WEIXIN_CODEX_APPROVAL?.trim() || "never",
+    options.approval || agentEnv("APPROVAL", "never"),
     "exec",
     "--skip-git-repo-check",
     "-C",
-    options.cwd || process.env.WEIXIN_CODEX_CWD?.trim() || process.cwd(),
+    options.cwd || agentCwd(),
     "--sandbox",
-    options.sandbox || process.env.WEIXIN_CODEX_SANDBOX?.trim() || "read-only",
+    options.sandbox || agentEnv("SANDBOX", "read-only"),
     "--color",
     "never",
     "-o",
     outputFile,
   ];
 
-  const model = options.model?.trim() || process.env.WEIXIN_CODEX_MODEL?.trim();
+  const model = options.model?.trim() || agentEnv("MODEL");
   if (model) {
     args.push("--model", model);
   }
   for (const imagePath of options.images || []) {
     args.push("--image", imagePath);
   }
-  args.push(...parseExtraArgs(process.env.WEIXIN_CODEX_EXTRA_ARGS), "-");
+  args.push(...parseExtraArgs(process.env.WEIXIN_AGENT_EXTRA_ARGS || process.env.WEIXIN_CODEX_EXTRA_ARGS), "-");
 
-  const timeoutMs = Number(options.timeoutMs || process.env.WEIXIN_CODEX_TIMEOUT_MS || DEFAULT_CODEX_TIMEOUT_MS);
+  const timeoutMs = Number(options.timeoutMs || agentEnv("TIMEOUT_MS", String(DEFAULT_CODEX_TIMEOUT_MS)));
   const startedAt = Date.now();
-  const child = spawn(process.env.WEIXIN_CODEX_BIN?.trim() || "codex", args, {
+  const child = spawn(agentBinary("codex"), args, {
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, NO_COLOR: "1" },
     detached: true,
@@ -1443,6 +1512,81 @@ async function runCodex(prompt, options = {}) {
   }
   log(`codex done pid=${child.pid || "unknown"} ms=${Date.now() - startedAt}`);
   return (finalText || stdout).trim();
+}
+
+async function runStreamAgent(type, prompt, options = {}) {
+  const cwd = options.cwd || agentCwd();
+  const model = options.model?.trim() || agentEnv("MODEL");
+  const timeoutMs = Number(options.timeoutMs || agentEnv("TIMEOUT_MS", String(DEFAULT_CODEX_TIMEOUT_MS)));
+  const attachmentNotes = [
+    ...(options.images || []).map((filePath) => `图片附件: ${filePath}`),
+    ...(options.files || []).map((filePath) => `文件附件: ${filePath}`),
+  ];
+  const effectivePrompt = attachmentNotes.length ? `${prompt}\n\n${attachmentNotes.join("\n")}` : prompt;
+  let args;
+  let stdin = effectivePrompt;
+  if (type === "claude") {
+    args = ["--print", "--output-format", "text"];
+    if (model) args.push("--model", model);
+  } else if (type === "opencode") {
+    args = ["-p", effectivePrompt, "-f", "text", "-q", "-c", cwd];
+    stdin = "";
+  } else {
+    throw new Error(`unsupported Agent type: ${type}`);
+  }
+  args.push(...parseExtraArgs(process.env.WEIXIN_AGENT_EXTRA_ARGS));
+
+  const startedAt = Date.now();
+  const child = spawn(agentBinary(type), args, {
+    cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, NO_COLOR: "1" },
+    detached: true,
+  });
+  if (child.pid) state.activeChildren.set(child.pid, child);
+  log(`${type} start pid=${child.pid || "unknown"} timeout_ms=${timeoutMs}`);
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (data) => { stdout += data.toString(); });
+  child.stderr.on("data", (data) => { stderr += data.toString(); });
+  child.stdin.end(stdin);
+
+  const result = await new Promise((resolve) => {
+    let settled = false;
+    let timedOut = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const timer = setTimeout(async () => {
+      timedOut = true;
+      await terminateProcessGroup(child);
+      finish({ code: 124, timedOut: true });
+    }, timeoutMs);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      finish({ code: 1, error });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      finish(timedOut ? { code: 124, timedOut: true } : { code });
+    });
+  });
+  if (child.pid) state.activeChildren.delete(child.pid);
+  if (result.code !== 0) {
+    const reason = result.timedOut
+      ? `${type} timed out after ${timeoutMs}ms`
+      : result.error?.message || `${type} exited with code ${result.code}`;
+    throw new Error((result.timedOut ? reason : (stderr || stdout || reason)).trim().slice(-1800));
+  }
+  log(`${type} done pid=${child.pid || "unknown"} ms=${Date.now() - startedAt}`);
+  return stdout.trim();
+}
+
+async function runLocalAgent(prompt, options = {}) {
+  const type = options.agentType || resolveAgentType();
+  return type === "codex" ? runCodex(prompt, options) : runStreamAgent(type, prompt, options);
 }
 
 function encodeAgentAttachments(paths) {
@@ -1510,8 +1654,9 @@ async function runForAgent(agent, prompt, options = {}) {
   if (agent.type === "remote") {
     return runRemoteAgent(agent, prompt, options);
   }
-  return runCodex(prompt, {
+  return runLocalAgent(prompt, {
     ...options,
+    agentType: agent.agentType || options.agentType,
     cwd: agent.cwd || options.cwd,
     model: agent.model || options.model,
     timeoutMs: options.timeoutMs || agent.timeoutMs,
@@ -1572,24 +1717,27 @@ async function processMessage(account, message) {
     const history = loadConversation(account.accountId, to);
     const agentsConfig = loadAgentsConfig();
     const currentAgentId = loadUserAgent(account.accountId, to);
-    const currentAgent = agentsConfig.agents[currentAgentId] || agentsConfig.agents.local;
+    const currentAgent = agentsConfig.agents[currentAgentId] || null;
     const routeCommand = agentCommand(body);
     if (routeCommand) {
       if (routeCommand.action === "list") {
-        const reply = `当前 Agent：${currentAgent.id}\n\n${formatAgentsList(agentsConfig, currentAgent.id)}\n\n切换命令：/agent <id>`;
+        const currentLabel = currentAgent ? currentAgent.id : `${currentAgentId}（当前不可用）`;
+        const reply = `当前 Agent：${currentLabel}\n\n${formatAgentsList(agentsConfig, currentAgent?.id || "")}\n\n切换命令：/agent <id>`;
         await sendText(account, to, reply, message.context_token);
         appendConversationTurn(account.accountId, to, body, reply);
         return;
       }
       if (routeCommand.action === "status") {
-        const reply = `当前 Agent：${currentAgent.id}\n${describeAgent(currentAgent)}`;
+        const reply = currentAgent
+          ? `当前 Agent：${currentAgent.id}\n${describeAgent(currentAgent)}`
+          : `当前 Agent：${currentAgentId}（当前不可用）\n请使用 /agents 查看在线节点并重新选择。`;
         await sendText(account, to, reply, message.context_token);
         appendConversationTurn(account.accountId, to, body, reply);
         return;
       }
       const selected = agentsConfig.agents[routeCommand.id];
       if (!selected) {
-        const reply = `没有找到 Agent“${routeCommand.id}”。\n\n可用 Agent：\n${formatAgentsList(agentsConfig, currentAgent.id)}`;
+        const reply = `没有找到 Agent“${routeCommand.id}”。\n\n可用 Agent：\n${formatAgentsList(agentsConfig, currentAgent?.id || "")}`;
         await sendText(account, to, reply, message.context_token);
         appendConversationTurn(account.accountId, to, body, reply);
         return;
@@ -1617,7 +1765,13 @@ async function processMessage(account, message) {
         return;
       }
       log(`approval accepted id=${command.id} from=${to}`);
-      const approvedAgent = agentsConfig.agents[pending.agentId] || agentsConfig.agents.local;
+      const approvedAgent = agentsConfig.agents[pending.agentId];
+      if (!approvedAgent) {
+        const reply = `任务 ${command.id} 绑定的 Agent“${pending.agentId}”当前不可用，已停止执行，不会回退到本机。`;
+        await sendText(account, to, reply, pending.contextToken || message.context_token);
+        appendConversationTurn(account.accountId, to, body, reply);
+        return;
+      }
       const reply = await runForAgent(approvedAgent, buildApprovedCodexPrompt(pending, history), {
         images: pending.imagePaths || [],
         files: pending.filePaths || [],
@@ -1635,11 +1789,19 @@ async function processMessage(account, message) {
       return;
     }
 
-    const localReply = localReplyFor(body);
+    if (!currentAgent) {
+      const reply = `当前 Agent“${currentAgentId}”不可用，消息未执行，也不会回退到本机。\n请使用 /agents 查看在线节点并通过 /agent <id> 重新选择。`;
+      await sendText(account, to, reply, message.context_token);
+      appendConversationTurn(account.accountId, to, body, reply);
+      log(`agent unavailable id=${currentAgentId} from=${to}`);
+      return;
+    }
+
+    const localReply = currentAgent.type === "local" ? localReplyFor(body) : null;
     if (localReply) {
       await sendText(account, to, localReply, message.context_token);
       appendConversationTurn(account.accountId, to, body, localReply);
-      log(`replied to=${to} chars=${localReply.length}`);
+      log(`replied to=${to} agent=${currentAgent.id} type=local-shortcut chars=${localReply.length}`);
       return;
     }
 
@@ -1675,10 +1837,10 @@ async function processMessage(account, message) {
     const reply = await runForAgent(currentAgent, buildCodexPrompt(message, body, history), { images, files });
     await sendText(account, to, reply, message.context_token);
     appendConversationTurn(account.accountId, to, body, reply);
-    log(`replied to=${to} chars=${reply.length}`);
+    log(`replied to=${to} agent=${currentAgent.id} type=${currentAgent.type} chars=${reply.length}`);
   } catch (error) {
     warn(`failed processing message from=${to}: ${error.message}`);
-    await sendText(account, to, `Codex 执行失败：${error.message}`, message.context_token);
+    await sendText(account, to, `Agent 执行失败：${error.message}`, message.context_token);
   }
 }
 
@@ -1738,18 +1900,18 @@ async function executeAgentRequest(payload) {
       : String(payload.prompt || "").trim();
     if (!prompt) throw new Error("prompt is empty");
     const timeoutMs = boundedNumber(
-      process.env.WEIXIN_CODEX_TIMEOUT_MS,
+      agentEnv("TIMEOUT_MS"),
       DEFAULT_CODEX_TIMEOUT_MS,
       MIN_AGENT_TIMEOUT_MS,
       MAX_AGENT_TIMEOUT_MS,
     );
-    return runCodex(prompt, {
+    return runLocalAgent(prompt, {
       images: imagePaths,
       files: filePaths,
-      cwd: process.env.WEIXIN_CODEX_CWD?.trim() || process.cwd(),
-      model: process.env.WEIXIN_CODEX_MODEL?.trim() || undefined,
-      approval: process.env.WEIXIN_CODEX_APPROVAL?.trim() || "never",
-      sandbox: process.env.WEIXIN_CODEX_SANDBOX?.trim() || "read-only",
+      cwd: agentCwd(),
+      model: agentEnv("MODEL") || undefined,
+      approval: agentEnv("APPROVAL", "never"),
+      sandbox: agentEnv("SANDBOX", "read-only"),
       timeoutMs,
     });
   } finally {
@@ -1795,12 +1957,14 @@ function validateRegistration(payload) {
   }
   const model = String(payload.model || "").trim();
   if (model.length > 128) throw new Error("model must be at most 128 characters");
+  const agentType = String(payload.agentType || "codex").trim().toLowerCase();
+  if (!AGENT_TYPES.includes(agentType)) throw new Error(`agentType must be one of: ${AGENT_TYPES.join(", ")}`);
   const requestedTimeout = Number(payload.timeoutMs || DEFAULT_AGENT_TIMEOUT_MS);
   if (!Number.isFinite(requestedTimeout) || requestedTimeout < MIN_AGENT_TIMEOUT_MS || requestedTimeout > MAX_AGENT_TIMEOUT_MS) {
     throw new Error(`timeoutMs must be ${MIN_AGENT_TIMEOUT_MS}-${MAX_AGENT_TIMEOUT_MS}`);
   }
   const timeoutMs = requestedTimeout;
-  return { id, label, executeUrl: parsedUrl.toString(), clientToken, cwd, model, timeoutMs };
+  return { id, label, executeUrl: parsedUrl.toString(), clientToken, cwd, model, agentType, timeoutMs };
 }
 
 function metricsSnapshot(isServer) {
@@ -1818,6 +1982,7 @@ function metricsSnapshot(isServer) {
     heartbeats: metrics.heartbeats,
     pendingApprovals: listAccountIds().reduce((count, accountId) => count + Object.keys(loadPendingApprovals(accountId)).length, 0),
     agentExecutions: { ...metrics.agentExecutions },
+    agentType: resolveAgentType(),
     ...(isServer ? { onlineClients: Object.keys(pruneClientsRegistry()).length } : {}),
   };
 }
@@ -1985,20 +2150,22 @@ async function registerClientLoop() {
   const clientPort = Number(process.env.WEIXIN_CLIENT_PORT || DEFAULT_CLIENT_PORT);
   const publicUrl = (process.env.WEIXIN_CLIENT_PUBLIC_URL?.trim() ||
     `http://${process.env.WEIXIN_CLIENT_ADVERTISE_HOST?.trim() || clientHost}:${clientPort}`).replace(/\/+$/, "");
+  const agentType = resolveAgentType();
   const body = {
     id,
     label,
     executeUrl: `${publicUrl}/v1/execute`,
     clientToken: currentClientToken(),
-    cwd: process.env.WEIXIN_CODEX_CWD?.trim() || process.cwd(),
-    model: process.env.WEIXIN_CODEX_MODEL?.trim() || "",
-    timeoutMs: Number(process.env.WEIXIN_CODEX_TIMEOUT_MS || DEFAULT_CODEX_TIMEOUT_MS),
+    cwd: agentCwd(),
+    model: agentEnv("MODEL"),
+    agentType,
+    timeoutMs: Number(agentEnv("TIMEOUT_MS", String(DEFAULT_CODEX_TIMEOUT_MS))),
   };
   const intervalMs = Number(process.env.WEIXIN_CLIENT_HEARTBEAT_MS || 30_000);
   while (true) {
     try {
       await postBridgeJson(`${serverUrl}/v1/clients/register`, serverSecret, body);
-      log(`registered client=${id} server=${serverUrl}`);
+      log(`registered client=${id} agent_type=${agentType} server=${serverUrl}`);
       break;
     } catch (error) {
       warn(`client registration failed: ${error.message}`);
@@ -2033,14 +2200,16 @@ async function registerUpstreamLoop() {
   const label = process.env.WEIXIN_SERVER_NODE_LABEL?.trim() || id;
   const publicUrl = (process.env.WEIXIN_SERVER_PUBLIC_URL?.trim() ||
     `http://${process.env.WEIXIN_SERVER_ADVERTISE_HOST?.trim() || process.env.WEIXIN_SERVER_HOSTNAME?.trim() || "127.0.0.1"}:${process.env.WEIXIN_SERVER_PORT || DEFAULT_SERVER_PORT}`).replace(/\/+$/, "");
+  const agentType = resolveAgentType();
   const body = {
     id,
     label,
     executeUrl: `${publicUrl}/v1/execute`,
     clientToken: process.env.WEIXIN_SERVER_NODE_TOKEN?.trim() || currentClientToken(),
-    cwd: process.env.WEIXIN_CODEX_CWD?.trim() || process.cwd(),
-    model: process.env.WEIXIN_CODEX_MODEL?.trim() || "",
-    timeoutMs: Number(process.env.WEIXIN_CODEX_TIMEOUT_MS || DEFAULT_CODEX_TIMEOUT_MS),
+    cwd: agentCwd(),
+    model: agentEnv("MODEL"),
+    agentType,
+    timeoutMs: Number(agentEnv("TIMEOUT_MS", String(DEFAULT_CODEX_TIMEOUT_MS))),
   };
   const intervalMs = Number(process.env.WEIXIN_UPSTREAM_HEARTBEAT_MS || 30_000);
   while (true) {
@@ -2119,12 +2288,17 @@ async function main() {
     for (const id of listAccountIds()) console.log(id);
     return;
   }
+  if (command === "executor") {
+    const type = resolveAgentType();
+    console.log(JSON.stringify({ type, binary: agentBinary(type), selection: process.env.WEIXIN_AGENT_TYPE?.trim() ? "explicit" : "detected" }));
+    return;
+  }
   if (command === "send") {
     const [, , , to, ...textParts] = process.argv;
     if (!to || textParts.length === 0) throw new Error("usage: codex-weixin-bridge send <to_user_id> <text>");
     return sendText(resolveAccount(), to, textParts.join(" "));
   }
-  console.log(`usage: weixin-agent-bridge [login|server|client|once|accounts|send]`);
+  console.log(`usage: weixin-agent-bridge [login|server|client|once|accounts|executor|send]`);
 }
 
 main().catch((error) => {

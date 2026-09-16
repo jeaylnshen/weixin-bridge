@@ -23,8 +23,10 @@ Weixin -> Server -> local Agent or registered Client -> local AI Agent
 The wire protocol is Agent-agnostic: an execution request contains a prompt and
 optional base64 attachments; the response contains final `text`. Execution
 directory, model, sandbox, approval, and timeout policy are fixed locally on
-each node and cannot be overridden remotely. The default executor is Codex, but
-`WEIXIN_CODEX_BIN` can point to another compatible local Agent executable.
+each node and cannot be overridden remotely. Select `codex`, `claude`, or
+`opencode` explicitly with `WEIXIN_AGENT_TYPE`; if unset, the node probes in
+that order. `WEIXIN_AGENT_BIN` requires an explicit type so a custom executable
+cannot be misidentified.
 
 ## Deployment Rules
 
@@ -56,6 +58,10 @@ Use these commands after the Server is running:
 
 Routing is per Weixin user. Approval records retain the selected Agent at task
 creation time.
+
+Local shortcut replies apply only while the selected Agent is `local`. Messages
+for a remote Agent must always reach that Client. If a selected Client is
+offline, stop and report it instead of silently executing on the Server.
 
 ## References
 

@@ -14,9 +14,13 @@
   - `/agents`：列出所有在线的智能体节点（本机与远程）。
   - `/agent <client-id>`：一键切换当前微信会话绑定的 Agent。
   - `/agent status`：查看当前绑定的智能体状态。
+- **多智能体执行引擎适配（v0.3.0+）**：
+  - 原生支持 **Codex**、**Claude Code** (`claude`) 以及 **OpenCode** (`opencode`) 等主流 Agent CLI。
+  - 通过 `WEIXIN_AGENT_TYPE` 灵活指定引擎，或通过自动探测无缝兼容。
+  - 提供 `node weixin-agent-bridge.mjs executor` 快速检测与验证当前节点的执行引擎。
 - **多模态与通用适配**：
   - 支持文本提示词、图片、文件附件传输。
-  - 默认对接 Codex，可通过 `WEIXIN_CODEX_BIN` 无缝接入任何支持命令行调用的 AI 智能体。
+  - 可通过 `WEIXIN_AGENT_BIN` / `WEIXIN_CODEX_BIN` 无缝接入自定义命令行智能体。
 - **安全与策略控制**：
   - 节点间采用 Bearer Token 安全认证与主机名白名单控制。
   - 沙箱级别、执行目录（CWD）、审批策略及超时时间由各节点本地强制隔离，远程无法越权篡改。
@@ -65,6 +69,7 @@ export WEIXIN_SERVER_SCHEME=http # 或 https
 export WEIXIN_SERVER_SECRET="服务端生成的secret"
 export WEIXIN_CLIENT_ID="cloud-server-1"
 export WEIXIN_CLIENT_PUBLIC_URL="http://client.yourdomain.com:8788"
+export WEIXIN_AGENT_TYPE="codex" # 可选: codex / claude / opencode
 export WEIXIN_CODEX_CWD=/path/to/remote/project
 
 node weixin-agent-bridge.mjs client

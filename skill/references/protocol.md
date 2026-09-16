@@ -26,6 +26,7 @@ POST /v1/execute
   "label": "Cloud Server 1",
   "executeUrl": "https://server1.example/v1/execute",
   "clientToken": "client-node-secret",
+  "agentType": "codex",
   "cwd": "/srv/project",
   "model": "",
   "timeoutMs": 120000
@@ -80,6 +81,7 @@ preserve authentication and avoid executing arbitrary requests without the
 configured authorization policy.
 
 The packaged executor always ignores remote execution-policy fields. Configure
-its directory, model, sandbox, approval, and timeout locally with `WEIXIN_CODEX_*`.
+its type with `WEIXIN_AGENT_TYPE` and local policy with `WEIXIN_AGENT_*` (or
+the legacy `WEIXIN_CODEX_*` variables).
 `GET /healthz` is public and returns only `{ "ok": true }`; authenticated
 `GET /v1/metrics` returns operational counters.
