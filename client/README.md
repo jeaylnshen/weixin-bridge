@@ -1,4 +1,4 @@
-# Weixin Agent Bridge Client 0.3.0
+# Weixin Agent Bridge Client 0.3.1
 
 The Client runs an AI Agent locally, exposes authenticated `/v1/execute`, and
 registers with the central Server. It never logs in to Weixin.
@@ -6,7 +6,7 @@ registers with the central Server. It never logs in to Weixin.
 ## Requirements
 
 - Node.js 22+
-- One supported CLI: Codex, Claude, or OpenCode
+- One supported CLI: Codex, Claude, OpenCode, or Google Antigravity (`agy`)
 - A reachable HTTPS/private-network Client URL
 
 ## Configure
@@ -24,7 +24,7 @@ export WEIXIN_AGENT_CWD=/srv/project
 node weixin-agent-bridge.mjs client
 ```
 
-Set `WEIXIN_AGENT_TYPE` to `codex`, `claude`, or `opencode`. Explicit selection
+Set `WEIXIN_AGENT_TYPE` to `codex`, `claude`, `opencode`, or `agy`. Explicit selection
 always wins. If omitted, the Client probes in that order and warns when more
 than one CLI is installed. A custom `WEIXIN_AGENT_BIN` requires an explicit
 type. Run `node weixin-agent-bridge.mjs executor` to inspect the selection.
@@ -33,6 +33,11 @@ Common settings are `WEIXIN_AGENT_MODEL`, `WEIXIN_AGENT_TIMEOUT_MS`, and
 `WEIXIN_AGENT_EXTRA_ARGS`. Existing `WEIXIN_CODEX_*` variables remain
 compatible. Execution policy stays local and cannot be overridden by Server
 requests.
+
+For Antigravity, set `WEIXIN_AGENT_TYPE=agy` and use `WEIXIN_AGENT_BIN` when
+`agy` is not on the service PATH. If the local approval policy is `never`, the
+adapter passes `--dangerously-skip-permissions`; use this only on a trusted
+node with an appropriately restricted working directory.
 
 ## systemd
 

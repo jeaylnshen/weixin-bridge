@@ -7,7 +7,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 const DEFAULT_BASE_URL = "https://ilinkai.weixin.qq.com";
 const DEFAULT_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 const DEFAULT_TIMEOUT_MS = 35_000;
@@ -23,7 +23,7 @@ const DEFAULT_CLIENT_PORT = 8788;
 const DEFAULT_CLIENT_TTL_MS = 90_000;
 const MIN_AGENT_TIMEOUT_MS = 1_000;
 const MAX_AGENT_TIMEOUT_MS = 15 * 60_000;
-const AGENT_TYPES = ["codex", "claude", "opencode"];
+const AGENT_TYPES = ["codex", "claude", "opencode", "agy"];
 
 const state = {
   stopping: false,
@@ -1530,6 +1530,13 @@ async function runStreamAgent(type, prompt, options = {}) {
     if (model) args.push("--model", model);
   } else if (type === "opencode") {
     args = ["-p", effectivePrompt, "-f", "text", "-q", "-c", cwd];
+    stdin = "";
+  } else if (type === "agy") {
+    args = ["--output-format", "text", `--print=${effectivePrompt}`];
+    if (model) args.push("--model", model);
+    if (agentEnv("APPROVAL", "never") === "never") {
+      args.push("--dangerously-skip-permissions");
+    }
     stdin = "";
   } else {
     throw new Error(`unsupported Agent type: ${type}`);

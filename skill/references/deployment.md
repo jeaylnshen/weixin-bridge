@@ -20,7 +20,7 @@
 4. Set a unique `WEIXIN_CLIENT_ID`, reachable
    `WEIXIN_CLIENT_PUBLIC_URL`, `WEIXIN_CLIENT_HOST`, and
    `WEIXIN_CLIENT_PORT`.
-5. Set `WEIXIN_AGENT_TYPE` explicitly to `codex`, `claude`, or `opencode`, and
+5. Set `WEIXIN_AGENT_TYPE` explicitly to `codex`, `claude`, `opencode`, or `agy`, and
    set `WEIXIN_AGENT_CWD` to the project directory. Automatic probing is only
    a fallback when `WEIXIN_AGENT_TYPE` is absent.
 6. Start `node weixin-agent-bridge.mjs client`.
