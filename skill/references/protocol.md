@@ -82,7 +82,7 @@ configured authorization policy.
 
 The packaged executor always ignores remote execution-policy fields. Configure
 its type with `WEIXIN_AGENT_TYPE` and local policy with `WEIXIN_AGENT_*` (or
-the legacy `WEIXIN_CODEX_*` variables). The `agy` adapter maps local approval
+the legacy `WEIXIN_CODEX_*` variables). The `agy` and `codebuddy` adapters map local approval
 policy `never` to `--dangerously-skip-permissions` for non-interactive runs.
 `GET /healthz` is public and returns only `{ "ok": true }`; authenticated
 `GET /v1/metrics` returns operational counters.

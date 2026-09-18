@@ -1,4 +1,4 @@
-# Weixin Agent Bridge Server 0.3.1
+# Weixin Agent Bridge Server 0.3.3
 
 The Server is the only component that logs in to Weixin. It routes each user to
 its local executor or a registered remote Client.
@@ -6,7 +6,7 @@ its local executor or a registered remote Client.
 ## Requirements
 
 - Node.js 22+
-- One supported local CLI: Codex, Claude, OpenCode, or Google Antigravity (`agy`)
+- One supported local CLI: Codex, Claude, OpenCode, Google Antigravity (`agy`), or CodeBuddy (`codebuddy`)
 
 ## Configure and run
 
@@ -24,7 +24,7 @@ The generated Server secret defaults to
 Clients. Set `WEIXIN_ALLOWED_CLIENT_HOSTS` when registrations cross an
 untrusted network.
 
-Set `WEIXIN_AGENT_TYPE` explicitly to `codex`, `claude`, `opencode`, or `agy`.
+Set `WEIXIN_AGENT_TYPE` explicitly to `codex`, `claude`, `opencode`, `agy`, or `codebuddy`.
 Automatic probing is only a fallback. Run `node weixin-agent-bridge.mjs
 executor` to inspect the selected executor.
 

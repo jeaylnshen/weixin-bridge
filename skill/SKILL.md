@@ -23,8 +23,8 @@ Weixin -> Server -> local Agent or registered Client -> local AI Agent
 The wire protocol is Agent-agnostic: an execution request contains a prompt and
 optional base64 attachments; the response contains final `text`. Execution
 directory, model, sandbox, approval, and timeout policy are fixed locally on
-each node and cannot be overridden remotely. Select `codex`, `claude`, or
-`opencode`, or `agy` explicitly with `WEIXIN_AGENT_TYPE`; if unset, the node probes in
+each node and cannot be overridden remotely. Select `codex`, `claude`,
+`opencode`, `agy`, or `codebuddy` explicitly with `WEIXIN_AGENT_TYPE`; if unset, the node probes in
 that order. `WEIXIN_AGENT_BIN` requires an explicit type so a custom executable
 cannot be misidentified.
 

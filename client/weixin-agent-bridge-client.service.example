@@ -21,6 +21,9 @@ Environment=WEIXIN_AGENT_TYPE=codex
 # Antigravity example:
 # Environment=WEIXIN_AGENT_TYPE=agy
 # Environment=WEIXIN_AGENT_BIN=/root/.local/bin/agy
+# CodeBuddy example:
+# Environment=WEIXIN_AGENT_TYPE=codebuddy
+# Environment=WEIXIN_AGENT_BIN=/root/.nvm/versions/node/v22.13.1/bin/codebuddy
 Environment=WEIXIN_CODEX_CWD=/srv/project
 Environment=WEIXIN_CODEX_SANDBOX=workspace-write
 Environment=WEIXIN_CODEX_APPROVAL=never
